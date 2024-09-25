@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         mikananiBgmScore
 // @namespace    https://github.com/kjtsune/UserScripts
-// @version      0.6
+// @version      0.8
 // @description  Mikan 蜜柑计划首页显示 Bangumi 评分 / 标签 / 链接。
 // @author       kjtsune
 // @match        https://mikanani.me/
@@ -17,13 +17,16 @@
 'use strict';
 
 let config = {
+    sortByScore: true,
+    logLevel: 2,
     // 若 minScore 的值大于0.1，会隐藏低于该评分的条目。
     minScore: 0,
     // 清除无效标签的正则匹配规则
     tagsRegex: /\d{4}|TV|动画|小说|漫|轻改|游戏改|原创|[a-zA-Z]/,
     // 标签数量限制，填0禁用标签功能。
     tagsNum: 3,
-    logLevel: 2,
+    // https://next.bgm.tv/demo/access-token  解除 NSFW 条目限制。
+    bgmToken: '',
 };
 
 let logger = {
@@ -56,7 +59,12 @@ async function sleep(ms) {
 
 async function getJSON(url) {
     try {
-        const response = await fetch(url);
+        let headers = {
+            'Authorization': `Bearer ${config.bgmToken}`,
+            'User-Agent': 'mikanBgm/0.1 (https://github.com/kjtsune/UserScripts)'
+        }
+        let options = (config.bgmToken) ? { headers: headers } : null;
+        const response = await fetch(url, options);
         logger.info(`fetch ${url}`)
         if (response.status >= 200 && response.status < 400)
             return await response.json();
@@ -247,6 +255,47 @@ class BgmStorage extends MyStorage {
     }
 }
 
+function swapElements(element1, element2) {
+    const parent1 = element1.parentNode;
+    const parent2 = element2.parentNode;
+    const temp = document.createElement('li');
+
+    parent1.insertBefore(temp, element1);
+    parent2.insertBefore(element1, element2);
+    parent1.insertBefore(element2, temp);
+    parent1.removeChild(temp);
+}
+
+function sortBangumi() {
+    for (const day_group of document.querySelectorAll('div.sk-bangumi')) {
+        if (day_group.querySelector('.sorted-marker')) return;
+
+        let ls = Array.from(day_group.querySelectorAll('.an-ul > li'));
+        let sorted_ls = Array.from(ls);
+        sorted_ls.sort((a, b) => {
+            const score_node_a = a.querySelector('div > a > img');
+            const score_node_b = b.querySelector('div > a > img');
+            if (!score_node_a || !score_node_b) return 0;
+            const scoreA = parseFloat(score_node_a.parentElement.text.trim());
+            const scoreB = parseFloat(score_node_b.parentElement.text.trim());
+            return scoreB - scoreA; // 从大到小排序
+        });
+
+        for (const sorted_ele of sorted_ls) {
+            let current_ls = Array.from(day_group.querySelectorAll('.an-ul > li'));
+            let correct_idx = sorted_ls.indexOf(sorted_ele);
+            let current_ele = current_ls[correct_idx];
+            swapElements(sorted_ele, current_ele);
+        }
+
+        const marker = document.createElement('div');
+        marker.className = 'sorted-marker';
+        day_group.appendChild(marker);
+    }
+    logger.info('sortBangumi Done')
+}
+
+
 async function addScoreSummaryToHtml(mikanElementList) {
     let bgmIco = `<img style="width:16px;" src="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALJu+f//////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsm75ELJu+cCybvn/sm75/7Ju+f+ybvn//////7Ju+f+ybvn/sm75/7Ju+f+ybvn/sm75/7Ju+f+ybvnAsm75ELJu+cCybvn/sm75/7Ju+f+ybvn/sm75////////////sm75/7Ju+f+ybvn/sm75/7Ju+f+ybvn/sm75/7Ju+cCwaPn/sGj5/9iz/P///////////////////////////////////////////////////////////9iz/P+waPn/rF/6/6xf+v//////////////////////////////////////////////////////////////////////rF/6/6lW+/+pVvv/////////////////////////////////zXn2/////////////////////////////////6lW+/+lTfz/pU38///////Nefb/zXn2/8159v//////zXn2///////Nefb//////8159v/Nefb/zXn2//////+lTfz/okT8/6JE/P//////////////////////2bb8/8159v/Nefb/zXn2/9m2/P//////////////////////okT8/546/f+eOv3//////8159v/Nefb/zXn2////////////////////////////zXn2/8159v/Nefb//////546/f+bMf7/mzH+//////////////////////////////////////////////////////////////////////+bMf7/lyj+wJco/v/Mk/7////////////////////////////////////////////////////////////Mk///lyj+wJQf/xCUH//AlB///5Qf//+UH///lB///5Qf//+aP///mj///5o///+UH///lB///5Qf//+UH///lB//wJQf/xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAzXn2/5o////Nefb/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAzXn2/wAAAAAAAAAAAAAAAM159v8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAzXn2/wAAAAAAAAAAAAAAAAAAAAAAAAAAzXn2/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAzXn2/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADNefb/AAAAAAAAAAAAAAAA+f8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/j8AAP3fAAD77wAA9/cAAA==">`
     for (const element of mikanElementList) {
@@ -265,7 +314,7 @@ async function addScoreSummaryToHtml(mikanElementList) {
         let tags = bgmInfo.tags;
         let tasgWithSummary = summary;
         let tagsHtml = '';
-        if (tags && tags.length > 0 && config.tagsNum > 0 ) {
+        if (tags && tags.length > 0 && config.tagsNum > 0) {
             tags = tags.filter(name => !config.tagsRegex.test(name));
             tagsHtml = `<br>${tags.slice(0, config.tagsNum)}`;
             tasgWithSummary = `tags: ${tags}\n\n${summary}`
@@ -369,8 +418,8 @@ async function main() {
     // animeList = animeList.slice(0, 10);
     await storeMikanBgm(animeList, true);
     await addScoreSummaryToHtml(animeList);
-    logger.info(animeList)
-
+    logger.debug(animeList);
+    if (config.sortByScore) { sortBangumi(); }
 }
 
 (function loop() {
