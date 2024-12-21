@@ -1,13 +1,11 @@
 // ==UserScript==
 // @name         mikananiBgmScore
 // @namespace    https://github.com/kjtsune/UserScripts
-// @version      0.8
+// @version      2024.12.21
 // @description  Mikan 蜜柑计划首页显示 Bangumi 评分 / 标签 / 链接。
 // @author       kjtsune
 // @match        https://mikanani.me/
 // @match        https://mikanani.me/Home/MyBangumi
-// @match        https://mikanani.tv/
-// @match        https://mikanani.tv/Home/MyBangumi
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=mikanani.me
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -237,14 +235,14 @@ class BgmStorage extends MyStorage {
         if (!airDate) { return true };
         let airedDay = this._msToDay(new Date().getTime() - new Date(airDate).getTime());
         switch (true) {
-            case (airedDay < 10):
-                expireDay = 1;
-                break;
-            case (airedDay < 20):
+            case (airedDay < 7):
                 expireDay = 2;
                 break;
+            case (airedDay < 14):
+                expireDay = 4;
+                break;
             case (airedDay < 180):
-                expireDay = 5;
+                expireDay = 6;
                 break;
             default:
                 expireDay = 15;
@@ -351,14 +349,14 @@ async function addScoreSummaryToHtml(mikanElementList) {
 let mikanBgmStorage = new MyStorage("mikan");
 let bgmInfoStorage = new BgmStorage("bgm", undefined, 7);
 
-async function storeMikanBgm(mikanElementList, storeBgmInfo = false) {
+async function fetchStoreMikanBgm(mikanElementList, storeBgmInfo = false) {
     let count = 0;
 
     async function checkBgmInfoExist(mkId) {
         let bgmId = mikanBgmStorage.get(mkId);
         if (!bgmId) return;
         if (bgmInfoStorage.bgmIsExpire(bgmId)) {
-            bgmInfoStorage.set(bgmId, await getParsedBgmInfo(bgmId));
+            bgmInfoStorage.set(bgmId, await getParsedBgmInfo(bgmId)); // fetch bgm
             count++;
         }
     }
@@ -368,7 +366,7 @@ async function storeMikanBgm(mikanElementList, storeBgmInfo = false) {
         let mikanId = mikanUrl.split('/').slice(-1)[0];
         let bgmId = mikanBgmStorage.get(mikanId)
         if (!bgmId) {
-            bgmId = await getBgmId(mikanUrl);
+            bgmId = await getBgmId(mikanUrl); // fetch mikan
             logger.info("fetch mikan", mikanId);
             mikanBgmStorage.set(mikanId, bgmId);
             logger.info(`set ${mikanId} to ${bgmId}`);
@@ -416,8 +414,8 @@ function countMikanBgm() {
 async function main() {
     let animeList = multiTimesSeletor(null, true, "div.sk-bangumi", "a[href^='/Home/Bangumi']");
     // animeList = animeList.slice(0, 10);
-    await storeMikanBgm(animeList, true);
-    await addScoreSummaryToHtml(animeList);
+    await fetchStoreMikanBgm(animeList, true);
+    // await addScoreSummaryToHtml(animeList); // 二次添加
     logger.debug(animeList);
     if (config.sortByScore) { sortBangumi(); }
 }
