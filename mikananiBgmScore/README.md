@@ -2,7 +2,7 @@
 
 Mikan 蜜柑计划首页显示 Bangumi 评分 / 标签 / 链接。
 
-![](https://github.com/kjtsune/UserScripts/raw/main/mikananiBgmScore/screenshot.jpg)
+![](https://raw.githubusercontent.com/kjtsune/UserScripts/main/mikananiBgmScore/screenshot.jpg)
 
 **可选配置**
 
